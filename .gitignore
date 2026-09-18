@@ -3,3 +3,5 @@
 categories.json
 /__pycache__
 transactions.csv
+spending-data.js
+.venv/

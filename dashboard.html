@@ -1,0 +1,1366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spending</title>
+  <style>
+    :root {
+      --bg: #0b0c0e;
+      --bg-2: #111318;
+      --bg-3: #171a20;
+      --bg-4: #1e222b;
+      --line: rgba(255, 255, 255, 0.07);
+      --line-strong: rgba(255, 255, 255, 0.12);
+      --text: #eef0f3;
+      --muted: #8b929e;
+      --faint: #5e6570;
+      --gold: #c6a572;
+      --gold-2: #e0c9a0;
+      --spend: #f07a7a;
+      --spend-soft: rgba(240, 122, 122, 0.14);
+      --income: #5ed0a8;
+      --income-soft: rgba(94, 208, 168, 0.14);
+      --warn: #e0b15a;
+      --shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      --radius: 16px;
+      --sidebar: 232px;
+      --font: "Segoe UI", "SF Pro Text", "Helvetica Neue", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background: radial-gradient(1200px 600px at 0% 0%, #16130f 0%, var(--bg) 42%);
+      color: var(--text);
+      min-height: 100%;
+    }
+    button, input { font-family: inherit; }
+    button { cursor: pointer; }
+
+    .app {
+      display: grid;
+      grid-template-columns: var(--sidebar) 1fr;
+      min-height: 100%;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--line);
+      background: rgba(11, 12, 14, 0.72);
+      padding: 28px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 8px;
+    }
+    .mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, var(--gold-2), var(--gold));
+      color: #1a140c;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .brand h1 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .nav-label {
+      color: var(--faint);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 0 10px;
+      margin-bottom: 8px;
+    }
+    .year-list { display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+    .year-btn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+    }
+    .year-btn:hover { background: var(--bg-3); color: var(--text); }
+    .year-btn.active {
+      background: var(--bg-3);
+      color: var(--text);
+      box-shadow: inset 0 0 0 1px var(--line-strong);
+    }
+    .year-btn .amt {
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+      color: var(--faint);
+    }
+    .year-btn.active .amt { color: var(--gold); }
+
+    .sidebar-foot {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ghost {
+      appearance: none;
+      border: 1px solid var(--line-strong);
+      background: transparent;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .ghost:hover { background: var(--bg-3); }
+
+    .main {
+      padding: 28px 36px 64px;
+      min-width: 0;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    .crumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .crumb button {
+      appearance: none;
+      border: 0;
+      background: none;
+      color: var(--muted);
+      padding: 0;
+      font-size: 13px;
+    }
+    .crumb button:hover, .crumb .here { color: var(--text); }
+    .period-title {
+      margin: 8px 0 0;
+      font-size: 34px;
+      font-weight: 600;
+      letter-spacing: -0.03em;
+    }
+    .nav-arrows { display: flex; gap: 8px; }
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      border: 1px solid var(--line-strong);
+      background: var(--bg-3);
+      color: var(--text);
+      display: grid;
+      place-items: center;
+    }
+    .icon-btn:disabled { opacity: 0.35; cursor: default; }
+
+    .month-strip {
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      margin-bottom: 22px;
+    }
+    .chip {
+      appearance: none;
+      border: 0;
+      background: var(--bg-3);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .chip.active { background: var(--text); color: #111; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .kpi {
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px 18px 15px;
+      min-width: 0;
+    }
+    .kpi .label { color: var(--muted); font-size: 12px; }
+    .kpi .value {
+      margin-top: 8px;
+      font-size: clamp(18px, 2.1vw, 26px);
+      font-weight: 600;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .kpi .delta {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .kpi .delta.up { color: var(--spend); }
+    .kpi .delta.down { color: var(--income); }
+    .kpi.income .value { color: var(--income); }
+    .kpi.net.pos .value { color: var(--income); }
+    .kpi.net.neg .value { color: var(--spend); }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .card {
+      background: var(--bg-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px;
+      min-width: 0;
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+    .seg { display: flex; background: var(--bg-4); border-radius: 999px; padding: 3px; }
+    .seg button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    .seg button.active { background: var(--text); color: #111; }
+
+    .bars {
+      display: flex;
+      align-items: stretch;
+      gap: 6px;
+      height: 220px;
+    }
+    .bar {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      flex: 1 1 0;
+      min-width: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      color: var(--faint);
+    }
+    .bar .track {
+      width: 100%;
+      max-width: 42px;
+      flex: 1;
+      background: var(--bg-4);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      align-items: flex-end;
+    }
+    .bar .fill {
+      width: 100%;
+      background: linear-gradient(180deg, #ef9a8f, var(--spend));
+      border-radius: 10px;
+    }
+    .bar.income .fill { background: linear-gradient(180deg, #8be0c2, var(--income)); }
+    .bar.net .fill.pos { background: linear-gradient(180deg, #8be0c2, var(--income)); }
+    .bar.net .fill.neg { background: linear-gradient(180deg, #ef9a8f, var(--spend)); }
+    .bar.active .track { box-shadow: 0 0 0 1px var(--gold); }
+    .bar:hover .fill { filter: brightness(1.08); }
+    .bar span { font-size: 11px; }
+
+    .donut-wrap {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .donut { position: relative; width: 190px; height: 190px; }
+    .donut svg { width: 190px; height: 190px; }
+    .donut-center {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      pointer-events: none;
+    }
+    .donut-center b {
+      display: block;
+      font-size: 18px;
+      font-variant-numeric: tabular-nums;
+    }
+    .donut-center small { color: var(--muted); font-size: 11px; }
+    .legend { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+    .legend button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      text-align: left;
+      padding: 5px 4px;
+      border-radius: 8px;
+    }
+    .legend button:hover, .legend button.active { background: var(--bg-4); }
+    .swatch { width: 10px; height: 10px; border-radius: 99px; }
+    .legend .name { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .legend .val { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+    .period-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+    }
+    .period-card {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--bg-3);
+      color: inherit;
+      border-radius: 14px;
+      padding: 14px;
+      text-align: left;
+    }
+    .period-card:hover { border-color: var(--line-strong); background: var(--bg-4); }
+    .period-card .name { color: var(--muted); font-size: 12px; }
+    .period-card .amt {
+      margin-top: 8px;
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+    .mini {
+      margin-top: 12px;
+      height: 4px;
+      background: var(--bg);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .mini span { display: block; height: 100%; background: var(--gold); }
+
+    .split-list { display: flex; flex-direction: column; gap: 12px; }
+    .row-bar {
+      appearance: none;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr) auto;
+      grid-template-areas:
+        "dot name amt"
+        ". bar bar";
+      column-gap: 10px;
+      row-gap: 6px;
+      align-items: center;
+      padding: 2px 0;
+    }
+    .row-bar .swatch { grid-area: dot; }
+    .row-bar .meta { grid-area: name; min-width: 0; }
+    .row-bar .meta b { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row-bar .meta small { color: var(--muted); font-size: 11px; }
+    .row-bar .amt { grid-area: amt; font-variant-numeric: tabular-nums; font-size: 13px; }
+    .hbar {
+      grid-area: bar;
+      height: 4px;
+      background: var(--bg-4);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .hbar i { display: block; height: 100%; border-radius: 99px; }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .search {
+      flex: 1;
+      min-width: 180px;
+      background: var(--bg-4);
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 9px 12px;
+      outline: none;
+    }
+    .search:focus { border-color: var(--gold); }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th {
+      text-align: left;
+      color: var(--faint);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+      padding: 8px 8px 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    th:nth-child(1), td:nth-child(1) { width: 108px; }
+    th:nth-child(3), td:nth-child(3) { width: 22%; }
+    th:nth-child(4), td:nth-child(4) { width: 120px; }
+    td {
+      padding: 11px 8px;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px;
+      vertical-align: top;
+    }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    td.neg { color: var(--spend); }
+    td.pos { color: var(--income); }
+    .payee { font-weight: 600; }
+    .purpose { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cat {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .cat i { width: 7px; height: 7px; border-radius: 99px; display: inline-block; }
+    .empty { color: var(--muted); padding: 24px 8px; }
+
+    .banner {
+      display: none;
+      margin-bottom: 16px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(198, 165, 114, 0.12);
+      color: var(--gold-2);
+      font-size: 13px;
+      border: 1px solid rgba(198, 165, 114, 0.2);
+    }
+    .banner.show { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .banner button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--gold-2);
+      text-decoration: underline;
+    }
+
+    .welcome {
+      display: none;
+      min-height: 70vh;
+      place-items: center;
+      text-align: center;
+      padding: 48px 20px;
+    }
+    .welcome.show { display: grid; }
+    .drop {
+      width: min(560px, 100%);
+      border: 1px dashed var(--line-strong);
+      border-radius: 24px;
+      padding: 48px 28px;
+      background: var(--bg-2);
+    }
+    .drop h2 { margin: 0 0 8px; font-size: 28px; letter-spacing: -0.03em; }
+    .drop p { color: var(--muted); margin: 0 0 22px; }
+    .drop.over { border-color: var(--gold); background: #17140f; }
+
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(8, 9, 11, 0.55);
+      place-items: center;
+      z-index: 20;
+      color: var(--gold-2);
+      font-size: 20px;
+    }
+    .overlay.show { display: grid; }
+
+    @media (min-width: 1400px) {
+      .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 1200px) {
+      .grid-2 { grid-template-columns: 1fr; }
+      .donut-wrap { grid-template-columns: 190px 1fr; }
+    }
+    @media (max-width: 1100px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { height: auto; position: relative; border-right: 0; border-bottom: 1px solid var(--line); }
+      .year-list { flex-direction: row; overflow-x: auto; }
+      .year-btn { min-width: 120px; }
+      .donut-wrap { grid-template-columns: 1fr; justify-items: center; }
+    }
+    @media (max-width: 720px) {
+      .main { padding: 20px 16px 48px; }
+      .period-title { font-size: 26px; }
+      th:nth-child(3), td:nth-child(3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="dropOverlay">Drop transactions.csv to load</div>
+  <div class="app" id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">S</div>
+        <div>
+          <h1>Spending</h1>
+          <p id="sourceLabel">No data loaded</p>
+        </div>
+      </div>
+      <div>
+        <div class="nav-label">Period</div>
+        <div class="year-list" id="yearList"></div>
+      </div>
+      <div class="sidebar-foot">
+        <button class="ghost" id="openFileBtn" type="button">Open transactions.csv</button>
+        <button class="ghost" id="demoBtn" type="button">Load demo data</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section class="welcome" id="welcome">
+        <div class="drop" id="dropzone">
+          <h2>Your spending, clearly.</h2>
+          <p>Run <code>python main.py</code> and reopen this file, or drop <strong>transactions.csv</strong> here.</p>
+          <button class="ghost" id="welcomeOpenBtn" type="button">Choose CSV</button>
+        </div>
+      </section>
+
+      <section id="dashboard" hidden>
+        <div class="banner" id="demoBanner">
+          <span>Showing demo data. Load <strong>transactions.csv</strong> from main.py to see your real spending.</span>
+          <button type="button" id="dismissBanner">Dismiss</button>
+        </div>
+        <div class="topbar">
+          <div>
+            <div class="crumb" id="crumb"></div>
+            <h1 class="period-title" id="periodTitle">All time</h1>
+          </div>
+          <div class="nav-arrows">
+            <button class="icon-btn" id="prevBtn" aria-label="Previous period">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="icon-btn" id="nextBtn" aria-label="Next period">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="month-strip" id="monthStrip"></div>
+        <div class="kpis" id="kpis"></div>
+        <div class="grid-2">
+          <section class="card">
+            <div class="card-head">
+              <h2 id="trendTitle">Spending by month</h2>
+              <div class="seg" id="metricSeg">
+                <button data-metric="spend" class="active" type="button">Spent</button>
+                <button data-metric="income" type="button">Income</button>
+                <button data-metric="net" type="button">Net</button>
+              </div>
+            </div>
+            <div id="trendChart"></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <h2>Spending by category</h2>
+            </div>
+            <div class="donut-wrap">
+              <div class="donut">
+                <svg id="donutSvg" viewBox="0 0 200 200"></svg>
+                <div class="donut-center">
+                  <div>
+                    <b id="donutValue">€0</b>
+                    <small id="donutLabel">Spent</small>
+                  </div>
+                </div>
+              </div>
+              <div class="legend" id="legend"></div>
+            </div>
+          </section>
+        </div>
+        <div class="grid-2">
+          <section class="card">
+            <div class="card-head">
+              <h2 id="breakdownTitle">Categories</h2>
+              <div class="seg" id="listSeg">
+                <button data-list="category" class="active" type="button">Categories</button>
+                <button data-list="payee" type="button">Payees</button>
+              </div>
+            </div>
+            <div class="split-list" id="breakdown"></div>
+          </section>
+          <section class="card">
+            <div class="card-head">
+              <h2 id="jumpTitle">Months</h2>
+            </div>
+            <div class="period-grid" id="periodGrid"></div>
+          </section>
+        </div>
+        <section class="card">
+          <div class="card-head">
+            <h2>Transactions</h2>
+            <div class="toolbar">
+              <input class="search" id="search" placeholder="Search payee, purpose, category…" />
+              <div class="seg" id="signSeg">
+                <button data-sign="all" class="active" type="button">All</button>
+                <button data-sign="spend" type="button">Spent</button>
+                <button data-sign="income" type="button">Income</button>
+              </div>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Payee</th>
+                  <th>Category</th>
+                  <th class="num">Amount</th>
+                </tr>
+              </thead>
+              <tbody id="txBody"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+  <input id="fileInput" type="file" accept=".csv,text/csv,application/json" hidden />
+
+  <script>
+    window.EMBEDDED_TRANSACTIONS = window.EMBEDDED_TRANSACTIONS || null;
+  </script>
+  <script src="spending-data.js"></script>
+  <script>
+    const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+    const MONTHS_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const PALETTE = ["#c6a572","#5ed0a8","#7aa7ff","#f07a7a","#d7b46a","#8be0d0","#c084fc","#fb923c","#67e8f9","#f472b6","#a3e635","#93c5fd","#fca5a5","#fcd34d","#2dd4bf","#818cf8"];
+    const money = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
+    const state = {
+      rows: [],
+      source: "none",
+      period: { type: "all" },
+      metric: "spend",
+      list: "category",
+      sign: "all",
+      search: "",
+      category: null,
+      hoverCategory: null,
+    };
+
+    function colorFor(name) {
+      const key = (name || "Uncategorized").toLowerCase();
+      let hash = 0;
+      for (let i = 0; i < key.length; i += 1) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+      return PALETTE[hash % PALETTE.length];
+    }
+
+    function parseAmount(raw) {
+      const value = String(raw ?? "").trim().replace(/\s/g, "");
+      if (!value) return 0;
+      if (value.includes(",") && value.includes(".")) return parseFloat(value.replace(/\./g, "").replace(",", "."));
+      if (value.includes(",")) return parseFloat(value.replace(",", "."));
+      return parseFloat(value);
+    }
+
+    function parseBankDate(value) {
+      const [d, m, y] = String(value).trim().split(".");
+      const day = Number(d), month = Number(m), year = Number(y);
+      if (!day || !month || !year) throw new Error("Invalid date");
+      return { date: `${String(day).padStart(2,"0")}.${String(month).padStart(2,"0")}.${year}`, day, month, year };
+    }
+
+    function splitCsvLine(line, delimiter) {
+      const out = [];
+      let current = "";
+      let quoted = false;
+      for (let i = 0; i < line.length; i += 1) {
+        const ch = line[i];
+        if (quoted) {
+          if (ch === '"') {
+            if (line[i + 1] === '"') { current += '"'; i += 1; }
+            else quoted = false;
+          } else current += ch;
+        } else if (ch === '"') quoted = true;
+        else if (ch === delimiter) { out.push(current); current = ""; }
+        else current += ch;
+      }
+      out.push(current);
+      return out;
+    }
+
+    function parseCsv(text) {
+      const cleaned = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const lines = cleaned.split("\n").filter((line) => line.trim());
+      if (!lines.length) return [];
+      const delimiter = (lines[0].match(/;/g) || []).length >= (lines[0].match(/,/g) || []).length ? ";" : ",";
+      const headers = splitCsvLine(lines[0], delimiter).map((h) => h.trim());
+      const rows = [];
+      for (let i = 1; i < lines.length; i += 1) {
+        const cols = splitCsvLine(lines[i], delimiter);
+        const rec = {};
+        headers.forEach((h, idx) => { rec[h] = cols[idx] ?? ""; });
+        rows.push(normalizeRow(rec));
+      }
+      return rows.filter(Boolean);
+    }
+
+    function normalizeRow(rec) {
+      try {
+        const parsed = parseBankDate(rec.date || rec.Date || rec.Buchungstag);
+        const amount = parseAmount(rec.amount_eur ?? rec.amount ?? rec.Betrag ?? 0);
+        return {
+          date: parsed.date,
+          day: parsed.day,
+          month: parsed.month,
+          year: parsed.year,
+          booking_type: rec.booking_type || rec.Buchungstext || "",
+          payee: rec.payee || rec.Payee || "",
+          purpose: rec.purpose || rec.Verwendungszweck || "",
+          amount,
+          category: rec.category || rec.Category || "Uncategorized",
+        };
+      } catch {
+        return null;
+      }
+    }
+
+    function mulberry32(seed) {
+      let a = seed >>> 0;
+      return () => {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), 1 | t);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function generateDemo() {
+      const rand = mulberry32(20260919);
+      const food = ["REWE", "ALDI SÜD", "EDEKA", "Lidl", "Kaufland"];
+      const rows = [];
+      const start = new Date(2025, 0, 1);
+      const end = new Date(2026, 8, 19);
+      for (let cursor = new Date(start); cursor <= end; cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)) {
+        const y = cursor.getFullYear();
+        const m = cursor.getMonth() + 1;
+        const last = new Date(y, m, 0).getDate();
+        const add = (day, payee, amount, category, purpose, booking_type) => {
+          rows.push({
+            date: `${String(Math.min(day, last)).padStart(2,"0")}.${String(m).padStart(2,"0")}.${y}`,
+            day: Math.min(day, last), month: m, year: y,
+            payee, amount, category, purpose, booking_type: booking_type || "Lastschrift",
+          });
+        };
+        add(1, "Hausverwaltung Berg", -980, "Miete", "Miete Wohnung", "Dauerauftrag/Terminueberw.");
+        add(3, "Fitness First", -49.9, "Sport", "Mitgliedschaft");
+        add(5, "Stadtwerke München", -(72 + Math.round(rand() * 30)), "Wohnen", "Strom / Gas");
+        add(8, "Telekom Deutschland", -39.99, "Abos", "Mobilfunk");
+        add(12, "Spotify AB", -11.99, "Abos", "Premium");
+        add(14, "Netflix", -13.99, "Abos", "Standard");
+        add(15, "HUK-COBURG", -18.4, "Versicherung", "Haftpflicht");
+        add(28, "Muster GmbH", 3120 + Math.round(rand() * 80), "Gehalt", "Gehalt / Lohn", "Gehalt/Rente");
+        const groceries = 5 + Math.floor(rand() * 4);
+        for (let i = 0; i < groceries; i += 1) {
+          add(2 + Math.floor(rand() * 26), food[Math.floor(rand() * food.length)], -(12 + rand() * 78), "Lebensmittel", "Einkauf");
+        }
+        add(4 + Math.floor(rand() * 20), rand() > 0.5 ? "Shell" : "Aral", -(45 + rand() * 40), "Transport", "Tanken");
+        if (rand() > 0.35) add(6 + Math.floor(rand() * 20), "Deutsche Bahn", -(19 + rand() * 55), "Transport", "Fahrkarte");
+        if (rand() > 0.25) add(9 + Math.floor(rand() * 18), "Amazon EU S.a.r.l.", -(8 + rand() * 90), "Shopping", "Bestellung", "PayPal");
+        if (rand() > 0.4) add(10 + Math.floor(rand() * 16), "Restaurant Tante Emma", -(18 + rand() * 42), "Restaurant", "Essen gehen");
+        if (rand() > 0.7) add(16, "Apotheke am Markt", -(7 + rand() * 28), "Gesundheit", "Rezept / OTC");
+        if (m % 3 === 0) add(20, "H&M", -(25 + rand() * 70), "Shopping", "Kleidung");
+      }
+      return rows.sort((a, b) => a.year - b.year || a.month - b.month || a.day - b.day);
+    }
+
+    function inPeriod(row, period) {
+      if (period.type === "year") return row.year === period.year;
+      if (period.type === "month") return row.year === period.year && row.month === period.month;
+      return true;
+    }
+
+    function previousPeriod(period) {
+      if (period.type === "month") {
+        return period.month === 1
+          ? { type: "month", year: period.year - 1, month: 12 }
+          : { type: "month", year: period.year, month: period.month - 1 };
+      }
+      if (period.type === "year") return { type: "year", year: period.year - 1 };
+      return null;
+    }
+
+    function shiftPeriod(period, delta, years) {
+      if (period.type === "month") {
+        const date = new Date(period.year, period.month - 1 + delta, 1);
+        return { type: "month", year: date.getFullYear(), month: date.getMonth() + 1 };
+      }
+      if (period.type === "year") return { type: "year", year: period.year + delta };
+      const idx = years.indexOf("all");
+      const next = years[Math.max(0, Math.min(years.length - 1, idx + delta))];
+      return next === "all" ? { type: "all" } : { type: "year", year: next };
+    }
+
+    function periodLabel(period) {
+      if (period.type === "month") return `${MONTHS[period.month - 1]} ${period.year}`;
+      if (period.type === "year") return String(period.year);
+      return "All time";
+    }
+
+    function summarize(rows) {
+      const spend = rows.filter((r) => r.amount < 0).reduce((s, r) => s + Math.abs(r.amount), 0);
+      const income = rows.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0);
+      return { spend, income, net: income - spend, count: rows.length };
+    }
+
+    function groupSum(rows, keyFn, expensesOnly) {
+      const map = new Map();
+      rows.forEach((row) => {
+        if (expensesOnly && row.amount >= 0) return;
+        const key = keyFn(row) || "Uncategorized";
+        const add = expensesOnly ? Math.abs(Math.min(row.amount, 0)) : row.amount;
+        if (!map.has(key)) map.set(key, { name: key, total: 0, count: 0 });
+        const item = map.get(key);
+        item.total += add;
+        item.count += 1;
+      });
+      return [...map.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+    }
+
+    function availableYears() {
+      const years = [...new Set(state.rows.map((r) => r.year))].sort((a, b) => b - a);
+      return ["all", ...years];
+    }
+
+    function currentRows() {
+      return state.rows.filter((row) => inPeriod(row, state.period));
+    }
+
+    function trendBuckets() {
+      const rows = currentRows();
+      if (state.period.type === "month") {
+        const last = new Date(state.period.year, state.period.month, 0).getDate();
+        return Array.from({ length: last }, (_, i) => {
+          const day = i + 1;
+          const slice = rows.filter((r) => r.day === day);
+          const stats = summarize(slice);
+          return { key: day, label: String(day), ...stats, target: { type: "month", year: state.period.year, month: state.period.month } };
+        });
+      }
+      if (state.period.type === "year") {
+        return Array.from({ length: 12 }, (_, i) => {
+          const month = i + 1;
+          const slice = rows.filter((r) => r.month === month);
+          return { key: month, label: MONTHS_SHORT[i], ...summarize(slice), target: { type: "month", year: state.period.year, month } };
+        });
+      }
+      const years = [...new Set(state.rows.map((r) => r.year))].sort((a, b) => a - b);
+      return years.map((year) => {
+        const slice = state.rows.filter((r) => r.year === year);
+        return { key: year, label: String(year), ...summarize(slice), target: { type: "year", year } };
+      });
+    }
+
+    function setText(id, value) {
+      document.getElementById(id).textContent = value;
+    }
+
+    function renderSidebar() {
+      const years = availableYears();
+      const list = document.getElementById("yearList");
+      list.innerHTML = "";
+      years.forEach((year) => {
+        const btn = document.createElement("button");
+        btn.className = "year-btn";
+        const period = year === "all" ? { type: "all" } : { type: "year", year };
+        const active = state.period.type === "all" ? year === "all" : state.period.year === year;
+        if (active && (state.period.type !== "month" || year !== "all")) btn.classList.add("active");
+        if (state.period.type === "month" && year === state.period.year) btn.classList.add("active");
+        const stats = summarize(state.rows.filter((row) => inPeriod(row, period)));
+        btn.innerHTML = `<span>${year === "all" ? "All time" : year}</span><span class="amt">${money.format(stats.spend)}</span>`;
+        btn.addEventListener("click", () => {
+          state.period = period;
+          state.category = null;
+          render();
+        });
+        list.appendChild(btn);
+      });
+    }
+
+    function renderCrumb() {
+      const el = document.getElementById("crumb");
+      el.innerHTML = "";
+      const add = (label, period, current) => {
+        if (!current) {
+          const btn = document.createElement("button");
+          btn.textContent = label;
+          btn.addEventListener("click", () => { state.period = period; state.category = null; render(); });
+          el.append(btn, document.createTextNode(" / "));
+        } else {
+          const span = document.createElement("span");
+          span.className = "here";
+          span.textContent = label;
+          el.append(span);
+        }
+      };
+      if (state.period.type === "all") add("All time", { type: "all" }, true);
+      else {
+        add("All time", { type: "all" }, false);
+        if (state.period.type === "year") add(String(state.period.year), { type: "year", year: state.period.year }, true);
+        else {
+          add(String(state.period.year), { type: "year", year: state.period.year }, false);
+          add(MONTHS[state.period.month - 1], state.period, true);
+        }
+      }
+      setText("periodTitle", periodLabel(state.period) + (state.category ? ` · ${state.category}` : ""));
+    }
+
+    function renderMonths() {
+      const strip = document.getElementById("monthStrip");
+      strip.innerHTML = "";
+      if (state.period.type === "all") return;
+      const year = state.period.year;
+      ["Year", ...MONTHS_SHORT].forEach((label, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "chip";
+        const isYear = idx === 0;
+        const active = isYear ? state.period.type === "year" : state.period.type === "month" && state.period.month === idx;
+        if (active) btn.classList.add("active");
+        btn.textContent = label;
+        btn.addEventListener("click", () => {
+          state.period = isYear ? { type: "year", year } : { type: "month", year, month: idx };
+          state.category = null;
+          render();
+        });
+        strip.appendChild(btn);
+      });
+    }
+
+    function renderKpis() {
+      const rows = currentRows();
+      const stats = summarize(rows);
+      const prev = previousPeriod(state.period);
+      const prevStats = prev ? summarize(state.rows.filter((row) => inPeriod(row, prev))) : null;
+      const delta = (now, then, invert = false) => {
+        if (!prevStats || then === 0) return { label: "No previous period", dir: "" };
+        const pct = ((now - then) / then) * 100;
+        const label = `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}% vs previous`;
+        const bad = invert ? pct < -3 : pct > 3;
+        const good = invert ? pct > 3 : pct < -3;
+        return { label, dir: bad ? "up" : good ? "down" : "" };
+      };
+      const items = [
+        { label: "Spent", value: stats.spend, extra: delta(stats.spend, prevStats?.spend || 0), cls: "" },
+        { label: "Income", value: stats.income, extra: delta(stats.income, prevStats?.income || 0, true), cls: "income" },
+        { label: "Net", value: stats.net, extra: { label: stats.income ? `${Math.round((stats.net / stats.income) * 100)}% kept` : "No income", dir: "" }, cls: `net ${stats.net >= 0 ? "pos" : "neg"}` },
+        { label: "Transactions", value: stats.count, extra: { label: state.category ? `Filtered by ${state.category}` : "In this period", dir: "" }, cls: "", raw: true },
+      ];
+      document.getElementById("kpis").innerHTML = items.map((item) => {
+        const d = item.extra;
+        return `<article class="kpi ${item.cls}"><div class="label">${item.label}</div><div class="value">${item.raw ? item.value : money.format(item.value)}</div><div class="delta ${d.dir || ""}">${d.label}</div></article>`;
+      }).join("");
+    }
+
+    function metricValue(stats) {
+      if (state.metric === "income") return stats.income;
+      if (state.metric === "net") return stats.net;
+      return stats.spend;
+    }
+
+    function renderTrend() {
+      const buckets = trendBuckets();
+      const max = Math.max(1, ...buckets.map((b) => Math.abs(metricValue(b))));
+      const title = state.period.type === "month" ? "Spending by day" : state.period.type === "year" ? "Spending by month" : "Spending by year";
+      setText("trendTitle", title.replace("Spending", state.metric === "income" ? "Income" : state.metric === "net" ? "Net" : "Spending"));
+      const wrap = document.getElementById("trendChart");
+      wrap.innerHTML = "";
+      const chart = document.createElement("div");
+      chart.className = "bars";
+      buckets.forEach((bucket) => {
+        const value = metricValue(bucket);
+        const btn = document.createElement("button");
+        btn.className = `bar ${state.metric}`;
+        const isActive = state.period.type === "month"
+          ? false
+          : state.period.type === "year"
+            ? state.period.month === bucket.key
+            : false;
+        if (isActive) btn.classList.add("active");
+        const height = value === 0 ? 0 : Math.max(4, Math.round((Math.abs(value) / max) * 100));
+        const fillClass = state.metric === "net" ? (value >= 0 ? "pos" : "neg") : "";
+        btn.innerHTML = `<span class="track"><span class="fill ${fillClass}" style="height:${height}%"></span></span><span>${bucket.label}</span>`;
+        btn.title = `${bucket.label}: ${money.format(value)}`;
+        btn.addEventListener("click", () => {
+          if (state.period.type === "month") return;
+          state.period = bucket.target;
+          state.category = null;
+          render();
+        });
+        chart.appendChild(btn);
+      });
+      wrap.appendChild(chart);
+    }
+
+    function polar(cx, cy, r, angle) {
+      return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+    }
+
+    function donutPath(cx, cy, r0, r1, a0, a1) {
+      const large = a1 - a0 > Math.PI ? 1 : 0;
+      const [x0, y0] = polar(cx, cy, r1, a0);
+      const [x1, y1] = polar(cx, cy, r1, a1);
+      const [x2, y2] = polar(cx, cy, r0, a1);
+      const [x3, y3] = polar(cx, cy, r0, a0);
+      return `M ${x0} ${y0} A ${r1} ${r1} 0 ${large} 1 ${x1} ${y1} L ${x2} ${y2} A ${r0} ${r0} 0 ${large} 0 ${x3} ${y3} Z`;
+    }
+
+    function categorySlices() {
+      const rows = currentRows();
+      let items = groupSum(rows, (r) => r.category, true);
+      const total = items.reduce((s, i) => s + i.total, 0);
+      if (items.length > 8) {
+        const head = items.slice(0, 7);
+        const rest = items.slice(7);
+        head.push({ name: "Other", total: rest.reduce((s, i) => s + i.total, 0), count: rest.reduce((s, i) => s + i.count, 0) });
+        items = head;
+      }
+      return { items, total };
+    }
+
+    function renderDonut() {
+      const { items, total } = categorySlices();
+      const svg = document.getElementById("donutSvg");
+      svg.innerHTML = "";
+      const legend = document.getElementById("legend");
+      legend.innerHTML = "";
+      const focus = state.hoverCategory || state.category;
+      const focusItem = items.find((i) => i.name === focus);
+      setText("donutValue", money.format(focusItem ? focusItem.total : total));
+      setText("donutLabel", focusItem ? focusItem.name : "Spent");
+      if (!total) {
+        svg.innerHTML = `<circle cx="100" cy="100" r="70" fill="none" stroke="#1e222b" stroke-width="22" />`;
+        legend.innerHTML = `<div class="empty">No expenses in this period.</div>`;
+        return;
+      }
+      let angle = -Math.PI / 2;
+      const gap = items.length > 1 ? 0.03 : 0;
+      items.forEach((item) => {
+        const sweep = (item.total / total) * Math.PI * 2;
+        const a0 = angle + gap / 2;
+        const a1 = angle + sweep - gap / 2;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", donutPath(100, 100, 58, 82, a0, Math.max(a0 + 0.01, a1)));
+        path.setAttribute("fill", colorFor(item.name));
+        path.style.opacity = focus && focus !== item.name ? "0.35" : "1";
+        path.style.cursor = "pointer";
+        path.addEventListener("mouseenter", () => { state.hoverCategory = item.name; renderDonut(); });
+        path.addEventListener("mouseleave", () => { state.hoverCategory = null; renderDonut(); });
+        path.addEventListener("click", () => {
+          state.category = state.category === item.name ? null : item.name;
+          render();
+        });
+        svg.appendChild(path);
+        angle += sweep;
+
+        const row = document.createElement("button");
+        if (state.category === item.name) row.classList.add("active");
+        row.innerHTML = `<span class="swatch" style="background:${colorFor(item.name)}"></span><span class="name">${item.name}</span><span class="val">${Math.round((item.total / total) * 100)}% · ${money.format(item.total)}</span>`;
+        row.addEventListener("mouseenter", () => { state.hoverCategory = item.name; renderDonut(); });
+        row.addEventListener("mouseleave", () => { state.hoverCategory = null; renderDonut(); });
+        row.addEventListener("click", () => {
+          state.category = state.category === item.name ? null : item.name;
+          render();
+        });
+        legend.appendChild(row);
+      });
+    }
+
+    function renderBreakdown() {
+      const rows = currentRows();
+      const items = state.list === "payee"
+        ? groupSum(rows, (r) => r.payee || "Unknown", true).slice(0, 10)
+        : groupSum(rows, (r) => r.category, true);
+      const max = Math.max(1, ...items.map((i) => i.total));
+      setText("breakdownTitle", state.list === "payee" ? "Top payees" : "Categories");
+      const wrap = document.getElementById("breakdown");
+      wrap.innerHTML = items.length ? "" : `<div class="empty">Nothing to show.</div>`;
+      items.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.className = "row-bar";
+        btn.innerHTML = `
+          <span class="swatch" style="background:${colorFor(item.name)}"></span>
+          <span class="meta"><b>${item.name}</b><small>${item.count} payment${item.count === 1 ? "" : "s"}</small></span>
+          <span class="amt">${money.format(item.total)}</span>
+          <span class="hbar"><i style="width:${Math.round((item.total / max) * 100)}%;background:${colorFor(item.name)}"></i></span>`;
+        if (state.list === "category") {
+          btn.addEventListener("click", () => {
+            state.category = state.category === item.name ? null : item.name;
+            render();
+          });
+        }
+        wrap.appendChild(btn);
+      });
+    }
+
+    function renderJumpGrid() {
+      const grid = document.getElementById("periodGrid");
+      grid.innerHTML = "";
+      if (state.period.type === "month") {
+        setText("jumpTitle", "Days with spending");
+        const rows = currentRows().filter((r) => r.amount < 0);
+        const byDay = groupSum(rows, (r) => String(r.day), true).slice(0, 12);
+        byDay.forEach((item) => {
+          const btn = document.createElement("button");
+          btn.className = "period-card";
+          btn.innerHTML = `<div class="name">${MONTHS_SHORT[state.period.month - 1]} ${item.name}</div><div class="amt">${money.format(item.total)}</div>`;
+          grid.appendChild(btn);
+        });
+        return;
+      }
+      const buckets = state.period.type === "all"
+        ? [...new Set(state.rows.map((r) => r.year))].sort((a, b) => b - a).map((year) => ({ label: String(year), stats: summarize(state.rows.filter((r) => r.year === year)), target: { type: "year", year } }))
+        : MONTHS.map((name, i) => ({ label: name, stats: summarize(currentRows().filter((r) => r.month === i + 1)), target: { type: "month", year: state.period.year, month: i + 1 } }))
+            .filter((bucket) => bucket.stats.count > 0);
+      setText("jumpTitle", state.period.type === "all" ? "Years" : "Months");
+      const max = Math.max(1, ...buckets.map((b) => b.stats.spend));
+      buckets.forEach((bucket) => {
+        const btn = document.createElement("button");
+        btn.className = "period-card";
+        btn.innerHTML = `<div class="name">${bucket.label}</div><div class="amt">${money.format(bucket.stats.spend)}</div><div class="mini"><span style="width:${Math.round((bucket.stats.spend / max) * 100)}%"></span></div>`;
+        btn.addEventListener("click", () => { state.period = bucket.target; state.category = null; render(); });
+        grid.appendChild(btn);
+      });
+    }
+
+    function renderTable() {
+      const q = state.search.trim().toLowerCase();
+      let rows = currentRows();
+      if (state.category && state.category !== "Other") rows = rows.filter((r) => r.category === state.category);
+      if (state.category === "Other") {
+        const top = new Set(categorySlices().items.map((i) => i.name));
+        rows = rows.filter((r) => r.amount < 0 && !top.has(r.category));
+      }
+      if (state.sign === "spend") rows = rows.filter((r) => r.amount < 0);
+      if (state.sign === "income") rows = rows.filter((r) => r.amount > 0);
+      if (q) {
+        rows = rows.filter((r) => `${r.payee} ${r.purpose} ${r.category} ${r.booking_type}`.toLowerCase().includes(q));
+      }
+      rows = [...rows].sort((a, b) => b.year - a.year || b.month - a.month || b.day - a.day);
+      const body = document.getElementById("txBody");
+      if (!rows.length) {
+        body.innerHTML = `<tr><td class="empty" colspan="4">No transactions match this view.</td></tr>`;
+        return;
+      }
+      body.innerHTML = rows.slice(0, 250).map((row) => `
+        <tr>
+          <td>${row.date}</td>
+          <td><div class="payee">${escapeHtml(row.payee || "—")}</div><div class="purpose">${escapeHtml(row.purpose)}</div></td>
+          <td><span class="cat"><i style="background:${colorFor(row.category)}"></i>${escapeHtml(row.category || "Uncategorized")}</span></td>
+          <td class="num ${row.amount < 0 ? "neg" : "pos"}">${row.amount > 0 ? "+" : ""}${money.format(row.amount)}</td>
+        </tr>
+      `).join("");
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function render() {
+      document.getElementById("welcome").classList.remove("show");
+      document.getElementById("dashboard").hidden = false;
+      document.getElementById("demoBanner").classList.toggle("show", state.source === "demo");
+      document.getElementById("sourceLabel").textContent =
+        state.source === "demo" ? "Demo data" : `${state.rows.length} transactions`;
+      renderSidebar();
+      renderCrumb();
+      renderMonths();
+      renderKpis();
+      renderTrend();
+      renderDonut();
+      renderBreakdown();
+      renderJumpGrid();
+      renderTable();
+      const years = [...new Set(state.rows.map((r) => r.year))].sort((a, b) => a - b);
+      document.getElementById("prevBtn").disabled = state.period.type === "all";
+      document.getElementById("nextBtn").disabled = state.period.type === "all" || (
+        state.period.type === "year" && state.period.year === years[years.length - 1]
+      ) || (
+        state.period.type === "month" && state.period.year === years[years.length - 1] && state.period.month === 12
+      );
+    }
+
+    function showWelcome() {
+      document.getElementById("welcome").classList.add("show");
+      document.getElementById("dashboard").hidden = true;
+      document.getElementById("sourceLabel").textContent = "No data loaded";
+    }
+
+    function loadRows(rows, source) {
+      state.rows = rows.filter(Boolean);
+      state.source = source;
+      state.category = null;
+      const years = [...new Set(state.rows.map((r) => r.year))].sort((a, b) => b - a);
+      state.period = years.length ? { type: "year", year: years[0] } : { type: "all" };
+      if (!state.rows.length) { showWelcome(); return; }
+      render();
+    }
+
+    function loadFromText(text, source) {
+      const trimmed = text.trim();
+      if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+        const parsed = JSON.parse(trimmed);
+        const list = Array.isArray(parsed) ? parsed : parsed.transactions;
+        loadRows(list.map(normalizeRow), source);
+        return;
+      }
+      loadRows(parseCsv(text), source);
+    }
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => loadFromText(String(reader.result), "file");
+      reader.readAsText(file);
+    }
+
+    function bind() {
+      document.getElementById("openFileBtn").onclick = () => document.getElementById("fileInput").click();
+      document.getElementById("welcomeOpenBtn").onclick = () => document.getElementById("fileInput").click();
+      document.getElementById("demoBtn").onclick = () => loadRows(generateDemo(), "demo");
+      document.getElementById("dismissBanner").onclick = () => document.getElementById("demoBanner").classList.remove("show");
+      document.getElementById("fileInput").onchange = (e) => {
+        const file = e.target.files?.[0];
+        if (file) loadFile(file);
+      };
+      document.getElementById("prevBtn").onclick = () => {
+        state.period = shiftPeriod(state.period, -1, availableYears());
+        render();
+      };
+      document.getElementById("nextBtn").onclick = () => {
+        state.period = shiftPeriod(state.period, 1, availableYears());
+        render();
+      };
+      document.getElementById("search").addEventListener("input", (e) => {
+        state.search = e.target.value;
+        renderTable();
+      });
+      document.getElementById("metricSeg").addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        state.metric = btn.dataset.metric;
+        [...e.currentTarget.children].forEach((el) => el.classList.toggle("active", el === btn));
+        renderTrend();
+      });
+      document.getElementById("listSeg").addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        state.list = btn.dataset.list;
+        [...e.currentTarget.children].forEach((el) => el.classList.toggle("active", el === btn));
+        renderBreakdown();
+      });
+      document.getElementById("signSeg").addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        state.sign = btn.dataset.sign;
+        [...e.currentTarget.children].forEach((el) => el.classList.toggle("active", el === btn));
+        renderTable();
+      });
+      window.addEventListener("keydown", (e) => {
+        if (e.target.matches("input, textarea")) return;
+        if (e.key === "ArrowLeft") document.getElementById("prevBtn").click();
+        if (e.key === "ArrowRight") document.getElementById("nextBtn").click();
+      });
+      ["dragenter", "dragover"].forEach((name) => {
+        window.addEventListener(name, (e) => {
+          e.preventDefault();
+          document.getElementById("dropOverlay").classList.add("show");
+          document.getElementById("dropzone").classList.add("over");
+        });
+      });
+      ["dragleave", "drop"].forEach((name) => {
+        window.addEventListener(name, (e) => {
+          e.preventDefault();
+          if (name === "dragleave" && e.target !== document.getElementById("dropOverlay")) return;
+          document.getElementById("dropOverlay").classList.remove("show");
+          document.getElementById("dropzone").classList.remove("over");
+        });
+      });
+      window.addEventListener("drop", (e) => {
+        const file = e.dataTransfer?.files?.[0];
+        if (file) loadFile(file);
+      });
+    }
+
+    async function boot() {
+      bind();
+      if (Array.isArray(window.EMBEDDED_TRANSACTIONS) && window.EMBEDDED_TRANSACTIONS.length) {
+        loadRows(window.EMBEDDED_TRANSACTIONS.map(normalizeRow), "live");
+        return;
+      }
+      try {
+        const res = await fetch("transactions.csv", { cache: "no-store" });
+        if (res.ok) {
+          loadFromText(await res.text(), "live");
+          return;
+        }
+      } catch {
+        /* file:// or missing csv */
+      }
+      showWelcome();
+    }
+
+    boot();
+  </script>
+</body>
+</html>

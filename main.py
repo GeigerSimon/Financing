@@ -1,7 +1,13 @@
-r"""Extract and categorize transactions from ING PDF bank statements and PayPal exports.
+r"""Extract and categorize transactions from bank statements and PayPal exports.
 
 Usage:
-    python main.py "path\to\statement.pdf"
+    python main.py
+
+Set CONFIG["input_type"] to choose the bank-statement format:
+    "ing_pdf"          ING PDF files in input_dir (*.pdf)
+    "sparkasse_csv"    Sparkasse CSV exports in input_dir (*.csv)
+
+Add another format by writing a loader and registering it in INPUT_LOADERS.
 
 The category rules are stored locally in categories.json.  When a transaction
 does not match a rule, the program asks for a category and keywords, then
@@ -21,8 +27,19 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
+
+# --- Config (edit these) ---
+CONFIG = {
+    # "ing_pdf" or "sparkasse_csv"
+    "input_type": "sparkasse_csv",
+    "input_dir": "Kontoauszuege",
+    "paypal_dir": "Paypal",
+    "rules_file": "categories.json",
+    "output_file": "transactions.csv",
+    "interactive": True,  # Set to False to disable interactive categorization
+}
 
 DATE_RE = re.compile(r"^(?P<date>\d{2}\.\d{2}\.\d{4})\s+")
 AMOUNT_RE = re.compile(r"(?P<amount>[+-]?\s*[\d.]+,\d{2})\s*$")
@@ -73,6 +90,37 @@ def extract_text(pdf_path: Path) -> str:
 def parse_amount(value: str) -> float:
     normalized = value.replace(" ", "").replace(".", "").replace(",", ".")
     return float(normalized)
+
+
+def _decode_csv_text(path: Path) -> str:
+    raw = path.read_bytes()
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def _normalize_csv_row(row: dict[str | None, str | None]) -> dict[str, str]:
+    return {(key or "").strip(): (value or "").strip() for key, value in row.items()}
+
+
+def _csv_field(row: dict[str, str], *names: str) -> str:
+    for name in names:
+        value = row.get(name)
+        if value:
+            return value
+    return ""
+
+
+def _parse_bank_date(value: str) -> str:
+    for fmt in ("%d.%m.%Y", "%d.%m.%y"):
+        try:
+            return datetime.strptime(value, fmt).strftime("%d.%m.%Y")
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid date: {value}")
 
 
 def parse_paypal_transactions(csv_path: Path) -> list[Transaction]:
@@ -206,6 +254,89 @@ def parse_transactions(text: str) -> list[Transaction]:
     return transactions
 
 
+SPARKASSE_REQUIRED_FIELDS = {
+    "Buchungstag",
+    "Buchungstext",
+    "Verwendungszweck",
+    "Betrag",
+}
+SPARKASSE_PAYEE_FIELDS = (
+    "Beguenstigter/Zahlungspflichtiger",
+    "Begünstigter/Zahlungspflichtiger",
+)
+
+
+def parse_sparkasse_transactions(csv_path: Path) -> list[Transaction]:
+    """Read Sparkasse account exports (semicolon-separated CSV)."""
+    text = _decode_csv_text(csv_path)
+    lines = text.splitlines()
+    if not lines:
+        raise ValueError(f"Sparkasse CSV is empty: {csv_path}")
+
+    header_index = 0
+    for index, line in enumerate(lines[:15]):
+        if "Buchungstag" in line and "Betrag" in line:
+            header_index = index
+            break
+    else:
+        raise ValueError(
+            f"Sparkasse CSV is missing a Buchungstag/Betrag header: {csv_path}"
+        )
+
+    reader = csv.DictReader(lines[header_index:], delimiter=";")
+    fieldnames = {(name or "").strip() for name in (reader.fieldnames or [])}
+    missing = SPARKASSE_REQUIRED_FIELDS.difference(fieldnames)
+    if missing:
+        raise ValueError(
+            f"Sparkasse CSV is missing columns: {', '.join(sorted(missing))}"
+        )
+    if not fieldnames.intersection(SPARKASSE_PAYEE_FIELDS):
+        raise ValueError(
+            "Sparkasse CSV is missing column: Beguenstigter/Zahlungspflichtiger"
+        )
+
+    transactions: list[Transaction] = []
+    for raw_row in reader:
+        row = _normalize_csv_row(raw_row)
+        info = _csv_field(row, "Info")
+        if info and info.casefold() != "umsatz gebucht":
+            continue
+
+        amount_raw = _csv_field(row, "Betrag")
+        date_raw = _csv_field(row, "Buchungstag")
+        if not amount_raw or not date_raw:
+            continue
+
+        currency = _csv_field(row, "Waehrung", "Währung")
+        if currency and currency.upper() != "EUR":
+            raise ValueError(f"Unsupported Sparkasse currency in {csv_path}: {currency}")
+
+        try:
+            date = _parse_bank_date(date_raw)
+            amount = parse_amount(amount_raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid Sparkasse transaction in {csv_path}: {row}") from exc
+
+        purpose_parts = [_csv_field(row, "Verwendungszweck")]
+        mandate = _csv_field(row, "Mandatsreferenz")
+        if mandate:
+            purpose_parts.append(f"Mandat: {mandate}")
+        creditor_id = _csv_field(row, "Glaeubiger ID", "Gläubiger ID")
+        if creditor_id:
+            purpose_parts.append(f"Gläubiger-ID: {creditor_id}")
+
+        transactions.append(
+            Transaction(
+                date=date,
+                booking_type=_csv_field(row, "Buchungstext"),
+                payee=_csv_field(row, *SPARKASSE_PAYEE_FIELDS),
+                purpose=" ".join(part for part in purpose_parts if part),
+                amount_eur=amount,
+            )
+        )
+    return transactions
+
+
 def _is_statement_noise(line: str) -> bool:
     noise = (
         "Girokonto Nummer",
@@ -335,12 +466,12 @@ def categorize(
 
         _print_available_categories(rules)
         print(f"Uncategorized:")
-        print(f"{"  Date:":<15}{transaction.date}")
-        print(f"{"  Payee:":<15}{transaction.payee}")
-        print(f"{"  Amount:":<15}{transaction.amount_eur:.2f} EUR")
+        print(f"{'  Date:':<15}{transaction.date}")
+        print(f"{'  Payee:':<15}{transaction.payee}")
+        print(f"{'  Amount:':<15}{transaction.amount_eur:.2f} EUR")
 
         if transaction.purpose:
-            print(f"{"  Purpose:":<15}{transaction.purpose}")
+            print(f"{'  Purpose:':<15}{transaction.purpose}")
         category = input("  Enter Category (or 'skip'/enter to skip): ").strip()
         if not category or category.lower() == "skip":
             transaction.category = "Uncategorized"
@@ -362,6 +493,16 @@ def categorize(
         rules[category] = list(dict.fromkeys((*existing_keywords, *learned_keywords)))
         transaction.category = category
 
+
+
+def write_dashboard_data(path: Path, transactions: Iterable[Transaction]) -> None:
+    payload = [asdict(transaction) for transaction in transactions]
+    path.write_text(
+        "window.EMBEDDED_TRANSACTIONS = "
+        + json.dumps(payload, ensure_ascii=False)
+        + ";\n",
+        encoding="utf-8",
+    )
 
 
 def write_csv(path: Path, transactions: Iterable[Transaction]) -> None:
@@ -394,21 +535,63 @@ def print_summary(transactions: Iterable[Transaction]) -> None:
     for category, total in sorted(totals.items(), key=lambda item: (-item[1], item[0])):
         print(f"\t{category}: {total:.2f} EUR")
 
+
+def _require_input_dir(input_dir: Path) -> Path:
+    if not input_dir.exists():
+        raise FileNotFoundError(f"Input directory not found: {input_dir}")
+    if not input_dir.is_dir():
+        raise NotADirectoryError(f"Input path is not a directory: {input_dir}")
+    return input_dir
+
+
+def load_ing_pdf_transactions(input_dir: Path) -> list[Transaction]:
+    input_dir = _require_input_dir(input_dir)
+    pdf_paths = sorted(path for path in input_dir.glob("*.pdf") if path.is_file())
+    if not pdf_paths:
+        raise FileNotFoundError(f"No PDF files found in {input_dir}")
+    transactions: list[Transaction] = []
+    for pdf_path in pdf_paths:
+        transactions.extend(parse_transactions(extract_text(pdf_path)))
+    return transactions
+
+
+def load_sparkasse_csv_transactions(input_dir: Path) -> list[Transaction]:
+    input_dir = _require_input_dir(input_dir)
+    csv_paths = sorted(path for path in input_dir.glob("*.csv") if path.is_file())
+    if not csv_paths:
+        raise FileNotFoundError(f"No CSV files found in {input_dir}")
+    transactions: list[Transaction] = []
+    for csv_path in csv_paths:
+        transactions.extend(parse_sparkasse_transactions(csv_path))
+    return transactions
+
+
+INPUT_LOADERS: dict[str, Callable[[Path], list[Transaction]]] = {
+    "ing_pdf": load_ing_pdf_transactions,
+    "sparkasse_csv": load_sparkasse_csv_transactions,
+}
+
+
+def load_bank_transactions(input_type: str, input_dir: Path) -> list[Transaction]:
+    loader = INPUT_LOADERS.get(input_type)
+    if loader is None:
+        supported = ", ".join(sorted(INPUT_LOADERS))
+        raise ValueError(f"Unknown input_type {input_type!r}. Supported: {supported}")
+    return loader(input_dir)
+
+
 def main() -> int:
     file_loc = Path(__file__).parent
-    pdf_dir = file_loc / "Kontoauszuege"
-    default_rules = file_loc / "categories.json"
-    interactive = True  # Set to False to disable interactive categorization
+    input_dir = file_loc / CONFIG["input_dir"]
+    default_rules = file_loc / CONFIG["rules_file"]
+    paypal_dir = file_loc / CONFIG["paypal_dir"]
+    output_path = file_loc / CONFIG["output_file"]
+    interactive = CONFIG["interactive"]
 
     try:
         rules = load_rules(default_rules)
-        transactions: list[Transaction] = []
-        for pdf_path in pdf_dir.glob("*.pdf"):
-            if not pdf_path.is_file():
-                raise FileNotFoundError(f"PDF not found: {pdf_path}")
-            transactions.extend(parse_transactions(extract_text(pdf_path)))
+        transactions = load_bank_transactions(CONFIG["input_type"], input_dir)
         paypal_transactions: list[Transaction] = []
-        paypal_dir = file_loc / "Paypal"
         if paypal_dir.exists() and not paypal_dir.is_dir():
             raise NotADirectoryError(f"PayPal path is not a directory: {paypal_dir}")
         paypal_paths = sorted(paypal_dir.iterdir()) if paypal_dir.exists() else []
@@ -416,15 +599,19 @@ def main() -> int:
             if paypal_path.is_file() and paypal_path.suffix.lower() == ".csv":
                 paypal_transactions.extend(parse_paypal_transactions(paypal_path))
         if not transactions:
-            raise ValueError("No transactions found. This may be a scanned PDF requiring OCR.")
+            raise ValueError(
+                f"No transactions found in {input_dir} for input_type {CONFIG['input_type']!r}."
+            )
         transactions = merge_paypal_transactions(transactions, paypal_transactions)
         categorize(transactions, rules, interactive=interactive)
         save_rules(default_rules, rules)
-        write_csv(file_loc / "transactions.csv", transactions)
+        write_csv(output_path, transactions)
+        write_dashboard_data(file_loc / "spending-data.js", transactions)
         print(
             f"Extracted {len(transactions)} transactions "
-            f"({len(paypal_transactions)} from PayPal) to {file_loc / 'transactions.csv'}"
+            f"({len(paypal_transactions)} from PayPal) to {output_path}"
         )
+        print(f"Open dashboard.html to explore spending.")
         print_summary(transactions)
     except (OSError, RuntimeError, ValueError, json.JSONDecodeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
