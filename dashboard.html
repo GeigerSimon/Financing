@@ -354,7 +354,7 @@
       border-radius: 8px;
     }
     .legend button:hover, .legend button.active { background: var(--bg-4); }
-    .swatch { width: 10px; height: 10px; border-radius: 99px; }
+    .swatch { width: 10px; height: 10px; border-radius: 99px; display: inline-block; flex-shrink: 0; }
     .legend .name { color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .legend .val { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 
@@ -472,6 +472,109 @@
     }
     .cat i { width: 7px; height: 7px; border-radius: 99px; display: inline-block; }
     .empty { color: var(--muted); padding: 24px 8px; }
+
+    .matrix-card { margin-bottom: 14px; }
+    .matrix-head-meta {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 400;
+    }
+    .matrix-wrap {
+      overflow: auto;
+      max-height: min(70vh, 640px);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+    .matrix {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+    }
+    .matrix th, .matrix td {
+      padding: 7px 6px;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      text-align: right;
+      border-bottom: 1px solid var(--line);
+      border-right: 1px solid rgba(255, 255, 255, 0.04);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .matrix th {
+      color: var(--faint);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-size: 10px;
+      background: var(--bg-3);
+    }
+    .matrix thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .matrix th:first-child, .matrix td:first-child {
+      text-align: left;
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      width: 188px;
+      min-width: 188px;
+      background: var(--bg-2);
+    }
+    .matrix th:nth-last-child(-n+3),
+    .matrix td:nth-last-child(-n+3) {
+      width: 108px;
+    }
+    .matrix thead th:first-child { z-index: 3; background: var(--bg-3); }
+    .matrix tfoot th:first-child, .matrix tfoot td:first-child { z-index: 2; }
+    .matrix .cat-cell {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+    }
+    .matrix button.cell, .matrix button.cat-btn, .matrix button.month-btn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      padding: 0;
+      width: 100%;
+      text-align: inherit;
+    }
+    .matrix button.cell:hover, .matrix button.cat-btn:hover, .matrix button.month-btn:hover {
+      color: var(--text);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .matrix td.neg { color: var(--spend); }
+    .matrix td.pos { color: var(--income); }
+    .matrix td.mixed { box-shadow: inset 0 -2px 0 rgba(224, 177, 90, 0.7); }
+    .matrix td.hl, .matrix th.hl { box-shadow: inset 0 0 0 1px var(--gold); }
+    .matrix tr.active td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
+    .matrix tfoot td, .matrix tfoot th {
+      font-weight: 650;
+      background: rgba(198, 165, 114, 0.08);
+      color: var(--text);
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 12px;
+    }
+    .matrix tfoot th:first-child { background: #1b1812; }
+    .matrix col.cat { width: 188px; }
+    .matrix col.stat { width: 108px; }
+    .matrix .stat { color: var(--muted); min-width: 88px; }
+    .matrix .empty-cell { color: transparent; }
 
     .banner {
       display: none;
@@ -595,6 +698,13 @@
         </div>
         <div class="month-strip" id="monthStrip"></div>
         <div class="kpis" id="kpis"></div>
+        <section class="card matrix-card">
+          <div class="card-head">
+            <h2 id="matrixTitle">Monthly overview</h2>
+            <span class="matrix-head-meta" id="matrixHint">Each cell is the monthly difference of + and −</span>
+          </div>
+          <div class="matrix-wrap" id="matrixWrap"></div>
+        </section>
         <div class="grid-2">
           <section class="card">
             <div class="card-head">
@@ -875,6 +985,77 @@
       return [...map.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
     }
 
+    function groupNet(rows, keyFn) {
+      const map = new Map();
+      rows.forEach((row) => {
+        const key = keyFn(row) || "Uncategorized";
+        if (!map.has(key)) map.set(key, { name: key, total: 0, spend: 0, income: 0, count: 0 });
+        const item = map.get(key);
+        item.total += row.amount;
+        item.count += 1;
+        if (row.amount < 0) item.spend += Math.abs(row.amount);
+        else if (row.amount > 0) item.income += row.amount;
+      });
+      return [...map.values()].sort((a, b) => a.total - b.total);
+    }
+
+    function signedMoney(value) {
+      if (!value) return money.format(0);
+      const formatted = money.format(Math.abs(value));
+      return value > 0 ? `+${formatted}` : `−${formatted}`;
+    }
+
+    function matrixYear() {
+      if (state.period.type === "year" || state.period.type === "month") return state.period.year;
+      const years = [...new Set(state.rows.map((r) => r.year))].sort((a, b) => b - a);
+      return years[0];
+    }
+
+    function categoryMonthMatrix(year) {
+      const rows = state.rows.filter((r) => r.year === year);
+      const activeMonths = new Set(rows.map((r) => r.month));
+      const activeMonthCount = Math.max(1, activeMonths.size);
+      const byCat = new Map();
+      rows.forEach((row) => {
+        const key = row.category || "Uncategorized";
+        if (!byCat.has(key)) {
+          byCat.set(key, {
+            name: key,
+            months: Array.from({ length: 12 }, () => ({ net: 0, spend: 0, income: 0, count: 0 })),
+          });
+        }
+        const cell = byCat.get(key).months[row.month - 1];
+        cell.net += row.amount;
+        cell.count += 1;
+        if (row.amount < 0) cell.spend += Math.abs(row.amount);
+        else if (row.amount > 0) cell.income += row.amount;
+      });
+      const items = [...byCat.values()]
+        .map((item) => {
+          const sum = item.months.reduce((s, cell) => s + cell.net, 0);
+          return { ...item, sum, avg: sum / activeMonthCount };
+        })
+        .filter((item) => item.months.some((cell) => cell.net || cell.spend || cell.income))
+        .sort((a, b) => a.sum - b.sum);
+      const absTotal = items.reduce((s, item) => s + Math.abs(item.sum), 0);
+      items.forEach((item) => {
+        item.share = absTotal ? Math.abs(item.sum) / absTotal : 0;
+      });
+      const monthTotals = Array.from({ length: 12 }, (_, i) => items.reduce((s, item) => s + item.months[i].net, 0));
+      const grand = items.reduce((s, item) => s + item.sum, 0);
+      const maxAbs = Math.max(1, ...items.flatMap((item) => item.months.map((cell) => Math.abs(cell.net))), ...monthTotals.map(Math.abs), Math.abs(grand));
+      return { year, items, monthTotals, grand, absTotal, activeMonthCount, maxAbs, activeMonths };
+    }
+
+    function heatStyle(value, maxAbs) {
+      if (!value) return "";
+      const t = Math.min(1, Math.abs(value) / maxAbs);
+      const alpha = 0.08 + t * 0.32;
+      return value < 0
+        ? `background: rgba(240, 122, 122, ${alpha.toFixed(3)});`
+        : `background: rgba(94, 208, 168, ${alpha.toFixed(3)});`;
+    }
+
     function availableYears() {
       const years = [...new Set(state.rows.map((r) => r.year))].sort((a, b) => b - a);
       return ["all", ...years];
@@ -985,10 +1166,20 @@
     }
 
     function renderKpis() {
-      const rows = currentRows();
+      let rows = currentRows();
+      if (state.category && state.category !== "Other") {
+        rows = rows.filter((row) => row.category === state.category);
+      } else if (state.category === "Other") {
+        const top = new Set(categorySlices().items.map((i) => i.name));
+        rows = rows.filter((r) => !top.has(r.category));
+      }
       const stats = summarize(rows);
       const prev = previousPeriod(state.period);
-      const prevStats = prev ? summarize(state.rows.filter((row) => inPeriod(row, prev))) : null;
+      let prevRows = prev ? state.rows.filter((row) => inPeriod(row, prev)) : [];
+      if (state.category && state.category !== "Other") {
+        prevRows = prevRows.filter((row) => row.category === state.category);
+      }
+      const prevStats = prev ? summarize(prevRows) : null;
       const delta = (now, then, invert = false) => {
         if (!prevStats || then === 0) return { label: "No previous period", dir: "" };
         const pct = ((now - then) / then) * 100;
@@ -1064,7 +1255,9 @@
 
     function categorySlices() {
       const rows = currentRows();
-      let items = groupSum(rows, (r) => r.category, true);
+      let items = groupNet(rows, (r) => r.category)
+        .filter((item) => item.total < 0)
+        .map((item) => ({ name: item.name, total: Math.abs(item.total), count: item.count, net: item.total, spend: item.spend, income: item.income }));
       const total = items.reduce((s, i) => s + i.total, 0);
       if (items.length > 8) {
         const head = items.slice(0, 7);
@@ -1125,21 +1318,26 @@
 
     function renderBreakdown() {
       const rows = currentRows();
-      const items = state.list === "payee"
-        ? groupSum(rows, (r) => r.payee || "Unknown", true).slice(0, 10)
-        : groupSum(rows, (r) => r.category, true);
-      const max = Math.max(1, ...items.map((i) => i.total));
+      const items = (state.list === "payee"
+        ? groupNet(rows, (r) => r.payee || "Unknown").slice(0, 10)
+        : groupNet(rows, (r) => r.category)
+      ).filter((item) => item.total || item.spend || item.income);
+      const max = Math.max(1, ...items.map((i) => Math.abs(i.total)));
       setText("breakdownTitle", state.list === "payee" ? "Top payees" : "Categories");
       const wrap = document.getElementById("breakdown");
       wrap.innerHTML = items.length ? "" : `<div class="empty">Nothing to show.</div>`;
       items.forEach((item) => {
+        const mixed = item.spend && item.income;
         const btn = document.createElement("button");
         btn.className = "row-bar";
+        const detail = mixed
+          ? `${signedMoney(-item.spend)} / ${signedMoney(item.income)} → ${signedMoney(item.total)}`
+          : `${item.count} payment${item.count === 1 ? "" : "s"}`;
         btn.innerHTML = `
           <span class="swatch" style="background:${colorFor(item.name)}"></span>
-          <span class="meta"><b>${item.name}</b><small>${item.count} payment${item.count === 1 ? "" : "s"}</small></span>
-          <span class="amt">${money.format(item.total)}</span>
-          <span class="hbar"><i style="width:${Math.round((item.total / max) * 100)}%;background:${colorFor(item.name)}"></i></span>`;
+          <span class="meta"><b>${escapeHtml(item.name)}</b><small>${detail}</small></span>
+          <span class="amt" style="color:${item.total < 0 ? "var(--spend)" : item.total > 0 ? "var(--income)" : "inherit"}">${signedMoney(item.total)}</span>
+          <span class="hbar"><i style="width:${Math.round((Math.abs(item.total) / max) * 100)}%;background:${colorFor(item.name)}"></i></span>`;
         if (state.list === "category") {
           btn.addEventListener("click", () => {
             state.category = state.category === item.name ? null : item.name;
@@ -1147,6 +1345,106 @@
           });
         }
         wrap.appendChild(btn);
+      });
+    }
+
+    function renderMatrix() {
+      const year = matrixYear();
+      const data = year ? categoryMonthMatrix(year) : { items: [], monthTotals: Array(12).fill(0), grand: 0, absTotal: 0, activeMonthCount: 1, maxAbs: 1, activeMonths: new Set() };
+      setText("matrixTitle", year ? `${year} monthly overview` : "Monthly overview");
+      setText("matrixHint", "Mixed +/− months show the difference");
+      const wrap = document.getElementById("matrixWrap");
+      if (!data.items.length) {
+        wrap.innerHTML = `<div class="empty">No transactions in this year.</div>`;
+        return;
+      }
+      const selectedMonth = state.period.type === "month" ? state.period.month : null;
+      const activeList = [...data.activeMonths].sort((a, b) => a - b);
+      const firstMonth = activeList[0];
+      const lastMonth = activeList[activeList.length - 1];
+      const visibleMonths = [];
+      for (let month = firstMonth; month <= lastMonth; month += 1) visibleMonths.push(month);
+      const monthHeads = visibleMonths.map((month) => {
+        const cls = selectedMonth === month ? "hl" : "";
+        return `<th class="${cls}"><button class="month-btn" data-month="${month}">${MONTHS_SHORT[month - 1]}</button></th>`;
+      }).join("");
+      const renderCell = (item, month) => {
+        const cell = item.months[month - 1];
+        const mixed = cell.spend && cell.income;
+        const empty = !cell.count;
+        const cls = [
+          empty ? "empty-cell" : cell.net > 0 ? "pos" : cell.net < 0 ? "neg" : "",
+          mixed ? "mixed" : "",
+          selectedMonth === month ? "hl" : "",
+        ].filter(Boolean).join(" ");
+        const title = empty
+          ? `${item.name} · ${MONTHS[month - 1]}: no activity`
+          : mixed
+            ? `${item.name} · ${MONTHS[month - 1]}: spent ${money.format(cell.spend)}, received ${money.format(cell.income)}, difference ${signedMoney(cell.net)}`
+            : `${item.name} · ${MONTHS[month - 1]}: ${signedMoney(cell.net)}`;
+        const label = empty ? "—" : signedMoney(cell.net);
+        return `<td class="${cls}" style="${empty ? "" : heatStyle(cell.net, data.maxAbs)}" title="${escapeHtml(title)}"><button class="cell" data-category="${escapeHtml(item.name)}" data-month="${month}">${label}</button></td>`;
+      };
+      const body = data.items.map((item) => {
+        const active = state.category === item.name ? "active" : "";
+        return `<tr class="${active}">
+          <td><button class="cat-btn" data-category="${escapeHtml(item.name)}"><span class="cat-cell"><span class="swatch" style="background:${colorFor(item.name)}"></span>${escapeHtml(item.name)}</span></button></td>
+          ${visibleMonths.map((month) => renderCell(item, month)).join("")}
+          <td class="${item.sum < 0 ? "neg" : item.sum > 0 ? "pos" : ""}" style="${heatStyle(item.sum, data.maxAbs)}">${signedMoney(item.sum)}</td>
+          <td class="stat">${(item.share * 100).toFixed(2).replace(".", ",")}%</td>
+          <td class="stat ${item.avg < 0 ? "neg" : item.avg > 0 ? "pos" : ""}">${signedMoney(item.avg)}</td>
+        </tr>`;
+      }).join("");
+      const footCells = visibleMonths.map((month) => {
+        const value = data.monthTotals[month - 1];
+        const empty = !data.activeMonths.has(month);
+        const cls = [empty ? "empty-cell" : value > 0 ? "pos" : value < 0 ? "neg" : "", selectedMonth === month ? "hl" : ""].filter(Boolean).join(" ");
+        return `<td class="${cls}">${empty ? "—" : signedMoney(value)}</td>`;
+      }).join("");
+      wrap.innerHTML = `<table class="matrix">
+        <colgroup>
+          <col class="cat" />
+          ${visibleMonths.map(() => `<col class="month" style="width:${(70 / visibleMonths.length).toFixed(2)}%" />`).join("")}
+          <col class="stat" /><col class="stat" /><col class="stat" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Category</th>
+            ${monthHeads}
+            <th>Sum</th>
+            <th>Share</th>
+            <th>Average</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+        <tfoot>
+          <tr>
+            <th>Total</th>
+            ${footCells}
+            <td class="${data.grand < 0 ? "neg" : "pos"}">${signedMoney(data.grand)}</td>
+            <td class="stat">100,00%</td>
+            <td class="stat">${signedMoney(data.grand / data.activeMonthCount)}</td>
+          </tr>
+        </tfoot>
+      </table>`;
+      wrap.querySelectorAll(".month-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.period = { type: "month", year, month: Number(btn.dataset.month) };
+          render();
+        });
+      });
+      wrap.querySelectorAll(".cat-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.category = state.category === btn.dataset.category ? null : btn.dataset.category;
+          render();
+        });
+      });
+      wrap.querySelectorAll("button.cell").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          state.period = { type: "month", year, month: Number(btn.dataset.month) };
+          state.category = btn.dataset.category;
+          render();
+        });
       });
     }
 
@@ -1186,7 +1484,7 @@
       if (state.category && state.category !== "Other") rows = rows.filter((r) => r.category === state.category);
       if (state.category === "Other") {
         const top = new Set(categorySlices().items.map((i) => i.name));
-        rows = rows.filter((r) => r.amount < 0 && !top.has(r.category));
+        rows = rows.filter((r) => !top.has(r.category));
       }
       if (state.sign === "spend") rows = rows.filter((r) => r.amount < 0);
       if (state.sign === "income") rows = rows.filter((r) => r.amount > 0);
@@ -1227,6 +1525,7 @@
       renderCrumb();
       renderMonths();
       renderKpis();
+      renderMatrix();
       renderTrend();
       renderDonut();
       renderBreakdown();
