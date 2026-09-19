@@ -41,6 +41,102 @@ RELATED_TRANSACTION_CODE_RE = re.compile(
 )
 
 
+def _parse_keywords(raw: str) -> list[str]:
+    return [keyword.strip().lower() for keyword in raw.split(",") if keyword.strip()]
+
+
+def _win_input_with_prefill(prompt: str, prefill: str) -> str:
+    """Windows line editor that starts with editable default text."""
+    import msvcrt
+
+    sys.stdout.write(prompt)
+    sys.stdout.write(prefill)
+    sys.stdout.flush()
+
+    chars = list(prefill)
+    cursor = len(chars)
+
+    def redraw_from_cursor() -> None:
+        rest = "".join(chars[cursor:])
+        sys.stdout.write(rest + " ")
+        sys.stdout.write("\b" * (len(rest) + 1))
+        sys.stdout.flush()
+
+    while True:
+        key = msvcrt.getwch()
+        if key in ("\r", "\n"):
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            return "".join(chars)
+        if key == "\x03":
+            raise KeyboardInterrupt
+        if key == "\x1a":
+            raise EOFError
+        if key in ("\x08", "\x7f"):
+            if cursor > 0:
+                cursor -= 1
+                del chars[cursor]
+                sys.stdout.write("\b")
+                redraw_from_cursor()
+            continue
+        if key in ("\x00", "\xe0"):
+            extra = msvcrt.getwch()
+            if extra == "K" and cursor > 0:
+                cursor -= 1
+                sys.stdout.write("\b")
+                sys.stdout.flush()
+            elif extra == "M" and cursor < len(chars):
+                sys.stdout.write(chars[cursor])
+                cursor += 1
+                sys.stdout.flush()
+            elif extra == "G":
+                sys.stdout.write("\b" * cursor)
+                cursor = 0
+                sys.stdout.flush()
+            elif extra == "O":
+                sys.stdout.write("".join(chars[cursor:]))
+                cursor = len(chars)
+                sys.stdout.flush()
+            elif extra == "S" and cursor < len(chars):
+                del chars[cursor]
+                redraw_from_cursor()
+            continue
+        chars.insert(cursor, key)
+        sys.stdout.write("".join(chars[cursor:]))
+        cursor += 1
+        leftover = len(chars) - cursor
+        if leftover:
+            sys.stdout.write("\b" * leftover)
+        sys.stdout.flush()
+
+
+def input_with_prefill(prompt: str, prefill: str = "") -> str:
+    """Ask for input with default text already on the line so it can be edited."""
+    if not prefill:
+        return input(prompt)
+    if not sys.stdin.isatty():
+        entered = input(prompt)
+        return entered if entered.strip() else prefill
+
+    if sys.platform == "win32":
+        return _win_input_with_prefill(prompt, prefill)
+
+    try:
+        import readline
+    except ImportError:
+        readline = None
+
+    if readline is not None:
+        readline.set_startup_hook(lambda: readline.insert_text(prefill))
+        try:
+            return input(prompt)
+        finally:
+            readline.set_startup_hook(None)
+
+    entered = input(f"{prompt}[{prefill}] ")
+    return entered if entered.strip() else prefill
+
+
 def pick_bank() -> Bank:
     banks = Bank.available()
     if not banks:
@@ -154,18 +250,11 @@ def categorize(
             transaction.category = "Uncategorized"
             continue
         default_keywords = _default_keywords(category, transaction)
-        if default_keywords:
-            print(f"  Automatic keywords: {', '.join(default_keywords)}")
-        keywords = input(
-            "  Keywords for this category, comma-separated "
-            "(additional; press Enter to use automatic keywords): "
-        ).strip()
-        additional_keywords = [
-            keyword.strip() for keyword in keywords.split(",") if keyword.strip()
-        ]
-        learned_keywords = [
-            keyword.lower() for keyword in (*default_keywords, *additional_keywords)
-        ]
+        keywords = input_with_prefill(
+            "  Keywords (edit automatic keywords or add additional comma-separated): ",
+            ", ".join(default_keywords),
+        )
+        learned_keywords = _parse_keywords(keywords)
         existing_keywords = rules.get(category, [])
         rules[category] = list(dict.fromkeys((*existing_keywords, *learned_keywords)))
         transaction.category = category

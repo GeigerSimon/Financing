@@ -87,7 +87,7 @@ You will be asked which bank to use. After that the pipeline is the same for eve
 For each unmatched transaction you are asked for:
 
 1. A **category** (or `skip` / Enter to leave it uncategorized).
-2. Optional extra **keywords**. Mandate IDs, related PayPal transaction codes, or the payee are suggested automatically.
+2. **Keywords**, prefilled with the automatic suggestion (mandate ID, related PayPal transaction code, or payee). Edit the line in place, press Enter to keep it, or add extra terms separated by commas.
 
 Rules are stored in `categories.json` as category → keyword lists. Matching prefers payee hits over shared identifiers such as mandate numbers.
 
