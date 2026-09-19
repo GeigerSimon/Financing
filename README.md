@@ -4,10 +4,11 @@ Extract and categorize transactions from German bank statements and PayPal expor
 
 ## What it does
 
-1. Loads bank statements from `Kontoauszuege/` (ING PDFs or Sparkasse CSVs).
-2. Optionally merges detailed PayPal rows from `Paypal/`, replacing the coarse bank-level PayPal funding entries.
-3. Assigns categories using saved keyword rules. Unmatched rows are categorized interactively, and those rules are reused next time.
-4. Writes `transactions.csv` and prints a spending summary (outgoing amounts by category).
+1. Asks which bank the statements belong to.
+2. Loads bank statements from `Kontoauszuege/` through that bank's adapter, which normalizes them into the same transaction format.
+3. Optionally merges detailed PayPal rows from `Paypal/`, replacing the coarse bank-level PayPal funding entries.
+4. Assigns categories using saved keyword rules. Unmatched rows are categorized interactively, and those rules are reused next time.
+5. Writes `transactions.csv` and prints a spending summary (outgoing amounts by category).
 
 ## Requirements
 
@@ -31,7 +32,7 @@ You can also install the package itself (`pip install -e .`), which provides a `
 Place statements next to `main.py`:
 
 ```
-Kontoauszuege/     bank statements (*.pdf or *.csv)
+Kontoauszuege/     bank statements (*.pdf or *.csv, depending on the bank)
 Paypal/            optional PayPal CSV exports
 ```
 
@@ -39,14 +40,14 @@ Those folders, `categories.json`, and `transactions.csv` are gitignored so state
 
 ### Bank formats
 
-Set `CONFIG["input_type"]` in `main.py`:
+Run `python main.py` and pick a bank. Each adapter lives in `src/` and maps its files onto the shared `Transaction` model:
 
-| `input_type`     | Files in `Kontoauszuege/` | Notes |
-|------------------|---------------------------|--------|
-| `sparkasse_csv`  | `*.csv`                   | Semicolon-separated Sparkasse export. Looks for `Buchungstag`, `Buchungstext`, `Verwendungszweck`, `Betrag`, and a payee column. Only booked rows (`Umsatz gebucht`) are kept. |
-| `ing_pdf`        | `*.pdf`                   | Text-based ING account statements. Image-only PDFs will not work. |
+| Bank        | Adapter              | Files in `Kontoauszuege/` | Notes |
+|-------------|----------------------|---------------------------|--------|
+| Sparkasse   | `src/Sparkasse.py`   | `*.csv`                   | Semicolon-separated Sparkasse export. Looks for `Buchungstag`, `Buchungstext`, `Verwendungszweck`, `Betrag`, and a payee column. Only booked rows (`Umsatz gebucht`) are kept. |
+| ING         | `src/ING.py`         | `*.pdf`                   | Text-based ING account statements. Image-only PDFs will not work. |
 
-To add another format, write a loader that returns `Transaction` objects and register it in `INPUT_LOADERS`.
+To add another bank, create a new file under `src/`, subclass `Bank` from `src/base.py`, implement `load()` so it returns `Transaction` objects, and import the module in `src/__init__.py`.
 
 ### PayPal
 
@@ -67,7 +68,6 @@ Edit the `CONFIG` dict at the top of `main.py`:
 
 ```python
 CONFIG = {
-    "input_type": "sparkasse_csv",  # or "ing_pdf"
     "input_dir": "Kontoauszuege",
     "paypal_dir": "Paypal",
     "rules_file": "categories.json",
@@ -81,6 +81,8 @@ CONFIG = {
 ```bash
 python main.py
 ```
+
+You will be asked which bank to use. After that the pipeline is the same for every bank.
 
 For each unmatched transaction you are asked for:
 
